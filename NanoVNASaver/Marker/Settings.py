@@ -19,7 +19,7 @@ import logging
 from PyQt5 import QtWidgets, QtCore, QtGui
 
 from NanoVNASaver.RFTools import Datapoint
-from NanoVNASaver.Marker import Marker
+from NanoVNASaver.Marker.Widget import Marker, LABELS, default_field_names
 
 VID = 1155
 PID = 22336
@@ -35,41 +35,6 @@ class MarkerSettingsWindow(QtWidgets.QWidget):
                      Datapoint(123456000, -0.3, 0.5),
                      Datapoint(124000000, -0.2, 0.5)]
 
-    fieldList = {"actualfreq": "Actual frequency",
-                 "impedance": "Impedance",
-                 "admittance": "Admittance",
-                 "serr": "Series R",
-                 "serlc": "Series equivalent L/C",
-                 "serl": "Series equivalent L",
-                 "serc": "Series equivalent C",
-                 "parr": "Parallel R",
-                 "parlc": "Parallel equivalent L/C",
-                 "parl": "Parallel equivalent L",
-                 "parc": "Parallel equivalent C",
-                 "vswr": "VSWR",
-                 "returnloss": "Return loss",
-                 "s11q": "S11 Quality factor",
-                 "s11phase": "S11 Phase",
-                 "s11groupdelay": "S11 Group Delay",
-                 "s21gain": "S21 Gain",
-                 "s21phase": "S21 Phase",
-                 "s21groupdelay": "S21 Group Delay",
-                 }
-
-    defaultValue = ["actualfreq",
-                    "impedance",
-                    "serl",
-                    "serc",
-                    "parr",
-                    "parlc",
-                    "vswr",
-                    "returnloss",
-                    "s11q",
-                    "s11phase",
-                    "s21gain",
-                    "s21phase"
-                    ]
-
     def __init__(self, app: QtWidgets.QWidget):
         super().__init__()
         self.app = app
@@ -77,7 +42,7 @@ class MarkerSettingsWindow(QtWidgets.QWidget):
         self.setWindowTitle("Marker settings")
         self.setWindowIcon(self.app.icon)
 
-        shortcut = QtWidgets.QShortcut(QtCore.Qt.Key_Escape, self, self.cancelButtonClick)
+        QtWidgets.QShortcut(QtCore.Qt.Key_Escape, self, self.cancelButtonClick)
 
         if len(self.app.markers) > 0:
             color = self.app.markers[0].color
@@ -99,7 +64,9 @@ class MarkerSettingsWindow(QtWidgets.QWidget):
         fields_group_box = QtWidgets.QGroupBox("Displayed data")
         fields_group_box_layout = QtWidgets.QFormLayout(fields_group_box)
 
-        self.savedFieldSelection = self.app.settings.value("MarkerFields", defaultValue=self.defaultValue)
+        self.savedFieldSelection = self.app.settings.value(
+            "MarkerFields", defaultValue=default_field_names()
+        )
 
         if self.savedFieldSelection == "":
             self.savedFieldSelection = []
@@ -108,12 +75,12 @@ class MarkerSettingsWindow(QtWidgets.QWidget):
 
         self.fieldSelectionView = QtWidgets.QListView()
         self.model = QtGui.QStandardItemModel()
-        for field in self.fieldList:
-            item = QtGui.QStandardItem(self.fieldList[field])
-            item.setData(field)
+        for l in LABELS:
+            item = QtGui.QStandardItem(l.description)
+            item.setData(l.fieldname)
             item.setCheckable(True)
             item.setEditable(False)
-            if field in self.currentFieldSelection:
+            if l.fieldname in self.currentFieldSelection:
                 item.setCheckState(QtCore.Qt.Checked)
             self.model.appendRow(item)
         self.fieldSelectionView.setModel(self.model)
@@ -187,18 +154,18 @@ class MarkerSettingsWindow(QtWidgets.QWidget):
         self.close()
 
     def defaultButtonClick(self):
-        self.currentFieldSelection = self.defaultValue.copy()
+        self.currentFieldSelection = default_field_names()
         self.resetModel()
         self.updateMarker()
 
     def resetModel(self):
         self.model = QtGui.QStandardItemModel()
-        for field in self.fieldList:
-            item = QtGui.QStandardItem(self.fieldList[field])
-            item.setData(field)
+        for fieldname, name, default in LABELS:
+            item = QtGui.QStandardItem(name)
+            item.setData(fieldname)
             item.setCheckable(True)
             item.setEditable(False)
-            if field in self.currentFieldSelection:
+            if fieldname in self.currentFieldSelection:
                 item.setCheckState(QtCore.Qt.Checked)
             self.model.appendRow(item)
         self.fieldSelectionView.setModel(self.model)

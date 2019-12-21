@@ -36,6 +36,7 @@ from .Chart import Chart, PhaseChart, VSWRChart, PolarChart, SmithChart, LogMagC
 from .Calibration import CalibrationWindow, Calibration
 from .Inputs import FrequencyInputWidget
 from .Marker import Marker, MarkerSettingsWindow
+from .Marker.Widget import default_field_names
 from .SITools import clamp_value
 from .SweepWorker import SweepWorker
 from .Touchstone import Touchstone
@@ -1680,8 +1681,9 @@ class DisplaySettingsWindow(QtWidgets.QWidget):
             color = QtGui.QColor(QtCore.Qt.darkGray)
         new_marker = Marker("Marker " + str(marker_count+1), color)
         new_marker.setColoredText(self.app.settings.value("ColoredMarkerNames", True, bool))
-        new_marker.setFieldSelection(self.app.settings.value("MarkerFields",
-                                                             defaultValue=self.marker_window.defaultValue))
+        new_marker.setFieldSelection(
+            self.app.settings.value("MarkerFields", defaultValue=default_field_names())
+        )
         new_marker.setScale(self.app.scaleFactor)
         self.app.markers.append(new_marker)
         self.app.marker_data_layout.addWidget(new_marker.getGroupBox())

@@ -15,7 +15,8 @@
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import math
-from typing import List
+import logging
+from typing import List, NamedTuple
 
 from PyQt5 import QtGui, QtWidgets, QtCore
 from PyQt5.QtCore import pyqtSignal
@@ -30,10 +31,51 @@ from NanoVNASaver.Inputs import MarkerFrequencyInputWidget as \
     FrequencyInput
 
 
+class Field(NamedTuple):
+    fieldname: str
+    name: str
+    description: str
+    default_active: bool
+
+
+LABELS = (
+    Field("actualfreq", "Frequency", "Actual frequency", True),
+    Field("impedance", "Impedance", "Impedance",  True),
+    Field("admittance", "Admittance", "Admittance", False),
+    Field("serr", "Series R", "Series R", False),
+    Field("serlc", "Series X", "Series equivalent L/C", False),
+    Field("serl", "Series L", "Series equivalent L", True),
+    Field("serc", "Series C", "Series equivalent C", True),
+    Field("parr", "Parallel R", "Parallel R", True),
+    Field("parlc", "Parallel X", "Parallel equivalent L/C", True),
+    Field("parl", "Parallel L", "Parallel equivalent L", False),
+    Field("parc", "Parallel C", "Parallel equivalent C", False),
+    Field("vswr", "VSWR", "VSWR", True),
+    Field("returnloss", "Return loss", "Return loss", True),
+    Field("s11q", "Quality factor", "S11 Quality factor", True),
+    Field("s11phase", "S11 Phase", "S11 Phase", True),
+    Field("s11groupdelay", "S11 Group Delay", "S11 Group Delay", False),
+    Field("s21gain", "S21 Gain", "S21 Gain", True),
+    Field("s21phase", "S21 Phase", "S21 Phase", True),
+    Field("s21groupdelay", "S21 Group Delay", "S21 Group Delay", False),
+)
+
+logger = logging.getLogger(__name__)
+
+
+def default_field_names():
+    return [l.fieldname for l in LABELS if l.default_active]
+
+
+class MarkerLabel(QtWidgets.QLabel):
+    def __init__(self, name):
+        super().__init__("")
+        self.name = name
+
+
 class Marker(QtCore.QObject):
     name = "Marker"
-    frequency = 0
-    color: QtGui.QColor = QtGui.QColor()
+    color = QtGui.QColor()
     coloredText = True
     location = -1
 
@@ -56,50 +98,15 @@ class Marker(QtCore.QObject):
         ###############################################################
         # Data display label
         ###############################################################
+        self.label = {}
+        for l in LABELS:
+            self.label[l.fieldname] = QtWidgets.QLabel("")
+        self.label['actualfreq'].setMinimumWidth(100)
+        self.label['returnloss'].setMinimumWidth(80)
 
-        self.frequency_label = QtWidgets.QLabel("")
-        self.frequency_label.setMinimumWidth(100)
-        self.impedance_label = QtWidgets.QLabel("")
-        self.admittance_label = QtWidgets.QLabel("")
-        self.parallel_r_label = QtWidgets.QLabel("")
-        self.parallel_x_label = QtWidgets.QLabel("")
-        self.parallel_c_label = QtWidgets.QLabel("")
-        self.parallel_l_label = QtWidgets.QLabel("")
-        self.returnloss_label = QtWidgets.QLabel("")
-        self.returnloss_label.setMinimumWidth(80)
-        self.vswr_label = QtWidgets.QLabel("")
-        self.series_r_label = QtWidgets.QLabel("")
-        self.series_x_label = QtWidgets.QLabel("")
-        self.inductance_label = QtWidgets.QLabel("")
-        self.capacitance_label = QtWidgets.QLabel("")
-        self.gain_label = QtWidgets.QLabel("")
-        self.s11_phase_label = QtWidgets.QLabel("")
-        self.s21_phase_label = QtWidgets.QLabel("")
-        self.s11_group_delay_label = QtWidgets.QLabel("")
-        self.s21_group_delay_label = QtWidgets.QLabel("")
-        self.quality_factor_label = QtWidgets.QLabel("")
-
-        self.fields = {
-            "actualfreq": ("Frequency:", self.frequency_label),
-            "impedance": ("Impedance:", self.impedance_label),
-            "admittance": ("Admittance:", self.admittance_label),
-            "serr": ("Series R:", self.series_r_label),
-            "serl": ("Series L:", self.inductance_label),
-            "serc": ("Series C:", self.capacitance_label),
-            "serlc": ("Series X:", self.series_x_label),
-            "parr": ("Parallel R:", self.parallel_r_label),
-            "parc": ("Parallel C:", self.parallel_c_label),
-            "parl": ("Parallel L:", self.parallel_l_label),
-            "parlc": ("Parallel X:", self.parallel_x_label),
-            "returnloss": ("Return loss:", self.returnloss_label),
-            "vswr": ("VSWR:", self.vswr_label),
-            "s11q": ("Quality factor:", self.quality_factor_label),
-            "s11phase": ("S11 Phase:", self.s11_phase_label),
-            "s11groupdelay": ("S11 Group Delay:", self.s11_group_delay_label),
-            "s21gain": ("S21 Gain:", self.gain_label),
-            "s21phase": ("S21 Phase:", self.s21_phase_label),
-            "s21groupdelay": ("S21 Group Delay:", self.s21_group_delay_label),
-        }
+        self.fields = {}
+        for l in LABELS:
+            self.fields[l.fieldname] = (l.name, self.label[l.fieldname])
 
         ###############################################################
         # Marker control layout
@@ -131,6 +138,7 @@ class Marker(QtCore.QObject):
         line = QtWidgets.QFrame()
         line.setFrameShape(QtWidgets.QFrame.VLine)
 
+        # line only if more then 3 selected
         self.left_form = QtWidgets.QFormLayout()
         self.right_form = QtWidgets.QFormLayout()
         box_layout.addLayout(self.left_form)
@@ -144,8 +152,9 @@ class Marker(QtCore.QObject):
 
     def setScale(self, scale):
         self.group_box.setMaximumWidth(int(340 * scale))
-        self.frequency_label.setMinimumWidth(int(100 * scale))
-        self.returnloss_label.setMinimumWidth(int(80 * scale))
+        self.label['actualfreq'].setMinimumWidth(int(100 * scale))
+        self.label['actualfreq'].setMinimumWidth(int(100 * scale))
+        self.label['returnloss'].setMinimumWidth(int(80 * scale))
         if self.coloredText:
             color_string = QtCore.QVariant(self.color)
             color_string.convert(QtCore.QVariant.String)
@@ -173,7 +182,7 @@ class Marker(QtCore.QObject):
             for field in self.fieldSelection:
                 if field in self.fields:
                     label, value = self.fields[field]
-                    self.left_form.addRow(label, value)
+                    self.left_form.addRow(label + ":", value)
                     value.show()
         else:
             left_half = math.ceil(len(self.fieldSelection)/2)
@@ -182,13 +191,13 @@ class Marker(QtCore.QObject):
                 field = self.fieldSelection[i]
                 if field in self.fields:
                     label, value = self.fields[field]
-                    self.left_form.addRow(label, value)
+                    self.left_form.addRow(label + ":", value)
                     value.show()
             for i in range(left_half, right_half):
                 field = self.fieldSelection[i]
                 if field in self.fields:
                     label, value = self.fields[field]
-                    self.right_form.addRow(label, value)
+                    self.right_form.addRow(label + ":", value)
                     value.show()
 
     def setFrequency(self, frequency):
@@ -196,7 +205,7 @@ class Marker(QtCore.QObject):
         self.updated.emit(self)
 
     def setFieldSelection(self, fields):
-        self.fieldSelection: List[str] = fields.copy()
+        self.fieldSelection = fields.copy()
         self.buildForm()
 
     def setColor(self, color):
@@ -266,25 +275,25 @@ class Marker(QtCore.QObject):
         return self.group_box
 
     def resetLabels(self):
-        self.frequency_label.setText("")
-        self.impedance_label.setText("")
-        self.admittance_label.setText("")
-        self.parallel_r_label.setText("")
-        self.parallel_x_label.setText("")
-        self.parallel_l_label.setText("")
-        self.parallel_c_label.setText("")
-        self.series_x_label.setText("")
-        self.series_r_label.setText("")
-        self.inductance_label.setText("")
-        self.capacitance_label.setText("")
-        self.vswr_label.setText("")
-        self.returnloss_label.setText("")
-        self.gain_label.setText("")
-        self.s11_phase_label.setText("")
-        self.s21_phase_label.setText("")
-        self.s11_group_delay_label.setText("")
-        self.s21_group_delay_label.setText("")
-        self.quality_factor_label.setText("")
+        self.label['actualfreq'].setText("")
+        self.label['impedance'].setText("")
+        self.label['admittance'].setText("")
+        self.label['parr'].setText("")
+        self.label['parlc'].setText("")
+        self.label['parl'].setText("")
+        self.label['parc'].setText("")
+        self.label['serlc'].setText("")
+        self.label['serr'].setText("")
+        self.label['serl'].setText("")
+        self.label['serc'].setText("")
+        self.label['vswr'].setText("")
+        self.label['returnloss'].setText("")
+        self.label['s21gain'].setText("")
+        self.label['s11phase'].setText("")
+        self.label['s21phase'].setText("")
+        self.label['s11groupdelay'].setText("")
+        self.label['s21groupdelay'].setText("")
+        self.label['s11q'].setText("")
 
     def updateLabels(self,
                      s11data: List[RFTools.Datapoint],
@@ -315,28 +324,28 @@ class Marker(QtCore.QObject):
         else:
             x_p_str = ind_p_str
 
-        self.frequency_label.setText(format_frequency(s11.freq))
+        self.label['actualfreq'].setText(format_frequency(s11.freq))
 
-        self.impedance_label.setText(format_complex_imp(imp))
-        self.series_r_label.setText(format_resistance(imp.real))
-        self.series_x_label.setText(x_str)
-        self.capacitance_label.setText(cap_str)
-        self.inductance_label.setText(ind_str)
+        self.label['impedance'].setText(format_complex_imp(imp))
+        self.label['serr'].setText(format_resistance(imp.real))
+        self.label['serlc'].setText(x_str)
+        self.label['serc'].setText(cap_str)
+        self.label['serl'].setText(ind_str)
 
-        self.admittance_label.setText(format_complex_imp(imp_p))
-        self.parallel_r_label.setText(format_resistance(imp_p.real))
-        self.parallel_x_label.setText(x_p_str)
-        self.parallel_c_label.setText(cap_p_str)
-        self.parallel_l_label.setText(ind_p_str)
+        self.label['admittance'].setText(format_complex_imp(imp_p))
+        self.label['parr'].setText(format_resistance(imp_p.real))
+        self.label['parlc'].setText(x_p_str)
+        self.label['parc'].setText(cap_p_str)
+        self.label['parl'].setText(ind_p_str)
 
-        self.vswr_label.setText(format_vswr(s11.vswr))
-        self.s11_phase_label.setText(format_phase(s11.phase))
-        self.quality_factor_label.setText(
+        self.label['vswr'].setText(format_vswr(s11.vswr))
+        self.label['s11phase'].setText(format_phase(s11.phase))
+        self.label['s11q'].setText(
             format_q_factor(s11.qFactor()))
 
-        self.returnloss_label.setText(
+        self.label['returnloss'].setText(
             format_gain(s11.gain, self.returnloss_is_positive))
-        self.s11_group_delay_label.setText(
+        self.label['s11groupdelay'].setText(
             format_group_delay(RFTools.groupDelay(s11data, self.location))
         )
 
@@ -346,8 +355,8 @@ class Marker(QtCore.QObject):
 
         s21 = s21data[self.location]
 
-        self.s21_phase_label.setText(format_phase(s21.phase))
-        self.gain_label.setText(format_gain(s21.gain))
-        self.s21_group_delay_label.setText(
+        self.label['s21phase'].setText(format_phase(s21.phase))
+        self.label['s21gain'].setText(format_gain(s21.gain))
+        self.label['s21groupdelay'].setText(
             format_group_delay(RFTools.groupDelay(s21data, self.location) / 2)
         )
