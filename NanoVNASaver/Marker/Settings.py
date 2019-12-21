@@ -160,12 +160,12 @@ class MarkerSettingsWindow(QtWidgets.QWidget):
 
     def resetModel(self):
         self.model = QtGui.QStandardItemModel()
-        for fieldname, name, default in LABELS:
-            item = QtGui.QStandardItem(name)
-            item.setData(fieldname)
+        for l in LABELS:
+            item = QtGui.QStandardItem(l.name)
+            item.setData(l.fieldname)
             item.setCheckable(True)
             item.setEditable(False)
-            if fieldname in self.currentFieldSelection:
+            if l.fieldname in self.currentFieldSelection:
                 item.setCheckState(QtCore.Qt.Checked)
             self.model.appendRow(item)
         self.fieldSelectionView.setModel(self.model)

@@ -99,14 +99,12 @@ class Marker(QtCore.QObject):
         # Data display label
         ###############################################################
         self.label = {}
-        for l in LABELS:
-            self.label[l.fieldname] = QtWidgets.QLabel("")
-        self.label['actualfreq'].setMinimumWidth(100)
-        self.label['returnloss'].setMinimumWidth(80)
-
         self.fields = {}
         for l in LABELS:
+            self.label[l.fieldname] = QtWidgets.QLabel("")
             self.fields[l.fieldname] = (l.name, self.label[l.fieldname])
+        self.label['actualfreq'].setMinimumWidth(100)
+        self.label['returnloss'].setMinimumWidth(80)
 
         ###############################################################
         # Marker control layout
@@ -275,25 +273,8 @@ class Marker(QtCore.QObject):
         return self.group_box
 
     def resetLabels(self):
-        self.label['actualfreq'].setText("")
-        self.label['impedance'].setText("")
-        self.label['admittance'].setText("")
-        self.label['parr'].setText("")
-        self.label['parlc'].setText("")
-        self.label['parl'].setText("")
-        self.label['parc'].setText("")
-        self.label['serlc'].setText("")
-        self.label['serr'].setText("")
-        self.label['serl'].setText("")
-        self.label['serc'].setText("")
-        self.label['vswr'].setText("")
-        self.label['returnloss'].setText("")
-        self.label['s21gain'].setText("")
-        self.label['s11phase'].setText("")
-        self.label['s21phase'].setText("")
-        self.label['s11groupdelay'].setText("")
-        self.label['s21groupdelay'].setText("")
-        self.label['s11q'].setText("")
+        for v in self.label.values():
+            v.setText("")
 
     def updateLabels(self,
                      s11data: List[RFTools.Datapoint],
