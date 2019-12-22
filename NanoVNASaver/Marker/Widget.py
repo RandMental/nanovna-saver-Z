@@ -60,6 +60,17 @@ LABELS = (
     Field("s21groupdelay", "S21 Group Delay", "S21 Group Delay", False),
 )
 
+COLORS = [
+    QtGui.QColor(QtCore.Qt.darkGray),
+    QtGui.QColor(255, 0, 0),
+    QtGui.QColor(0, 255, 0),
+    QtGui.QColor(0, 0, 255),
+    QtGui.QColor(0, 255, 255),
+    QtGui.QColor(255, 0, 255),
+    QtGui.QColor(255, 255, 0)
+]
+
+
 logger = logging.getLogger(__name__)
 
 
@@ -74,6 +85,7 @@ class MarkerLabel(QtWidgets.QLabel):
 
 
 class Marker(QtCore.QObject):
+    _instances = 0
     name = "Marker"
     color = QtGui.QColor()
     coloredText = True
@@ -85,11 +97,21 @@ class Marker(QtCore.QObject):
 
     fieldSelection = []
 
-    def __init__(self, name, initialColor, frequency=""):
+    def __init__(self, name: str = "", qsettings: QtCore.QSettings = None):
         super().__init__()
+        self.qsettings = qsettings
         self.name = name
 
-        self.frequency = RFTools.RFTools.parseFrequency(frequency)
+        if self.qsettings:
+            Marker._instances += 1
+            self.index = Marker._instances
+        else:
+            self.index = 0
+
+        if not self.name:
+            self.name = f"Marker {Marker._instances:d}"
+
+        self.frequency = 0
 
         self.frequencyInput = FrequencyInput()
         self.frequencyInput.setAlignment(QtCore.Qt.AlignRight)
@@ -131,7 +153,16 @@ class Marker(QtCore.QObject):
         self.group_box.setMaximumWidth(340)
         box_layout = QtWidgets.QHBoxLayout(self.group_box)
 
-        self.setColor(initialColor)
+        try:
+            self.setColor(
+                self.qsettings.value(
+                    f"Marker{self.index:d}Color", COLORS[self.index]
+                )
+            )
+        except AttributeError:  # happens when qsettings == None
+            self.setColor(COLORS[1])
+        except IndexError:
+            self.setColor(COLORS[0])
 
         line = QtWidgets.QFrame()
         line.setFrameShape(QtWidgets.QFrame.VLine)
@@ -144,6 +175,10 @@ class Marker(QtCore.QObject):
         box_layout.addLayout(self.right_form)
 
         self.buildForm()
+
+    def __del__(self):
+        if not self.qsettings:
+            Marker._instances -= 1
 
     def _size_str(self) -> str:
         return str(self.group_box.font().pointSize())

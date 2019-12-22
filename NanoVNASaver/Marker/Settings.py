@@ -44,13 +44,8 @@ class MarkerSettingsWindow(QtWidgets.QWidget):
 
         QtWidgets.QShortcut(QtCore.Qt.Key_Escape, self, self.cancelButtonClick)
 
-        if len(self.app.markers) > 0:
-            color = self.app.markers[0].color
-        else:
-            color = self.app.default_marker_colors[0]
-
-        self.exampleMarker = Marker("Example marker", initialColor=color, frequency="123456000")
-
+        # self.exampleMarker = Marker("Example marker", initialColor=color, frequency="123456000")
+        self.exampleMarker = Marker("Example marker")
         layout = QtWidgets.QVBoxLayout()
         self.setLayout(layout)
 
@@ -116,6 +111,7 @@ class MarkerSettingsWindow(QtWidgets.QWidget):
             m.setColoredText(self.checkboxColouredMarker.isChecked())
 
     def updateMarker(self):
+        self.exampleMarker.setFrequency(123456000)
         self.exampleMarker.setColoredText(self.checkboxColouredMarker.isChecked())
         self.exampleMarker.setFieldSelection(self.currentFieldSelection)
         self.exampleMarker.findLocation(self.exampleData11)

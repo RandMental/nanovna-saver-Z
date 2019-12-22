@@ -1,4 +1,5 @@
-#  NanoVNASaver - a python program to view and export Touchstone data from a NanoVNA
+#  NanoVNASaver
+#  A python program to view and export Touchstone data from a NanoVNA
 #  Copyright (C) 2019.  Rune B. Broberg
 #
 #  This program is free software: you can redistribute it and/or modify
@@ -41,7 +42,7 @@ from .SITools import clamp_value
 from .SweepWorker import SweepWorker
 from .Touchstone import Touchstone
 from .Analysis import Analysis, LowPassAnalysis, HighPassAnalysis, BandPassAnalysis, BandStopAnalysis, \
-    PeakSearchAnalysis, VSWRAnalysis, SimplePeakSearchAnalysis
+    VSWRAnalysis, SimplePeakSearchAnalysis
 from .about import version as ver
 
 VID = 1155
@@ -52,13 +53,6 @@ logger = logging.getLogger(__name__)
 
 class NanoVNASaver(QtWidgets.QWidget):
     version = ver
-    default_marker_colors = [QtGui.QColor(255, 0, 0),
-                             QtGui.QColor(0, 255, 0),
-                             QtGui.QColor(0, 0, 255),
-                             QtGui.QColor(0, 255, 255),
-                             QtGui.QColor(255, 0, 255),
-                             QtGui.QColor(255, 255, 0)]
-
     dataAvailable = QtCore.pyqtSignal()
     scaleFactor = 1
 
@@ -306,12 +300,7 @@ class NanoVNASaver(QtWidgets.QWidget):
         marker_count = clamp_value(
             self.settings.value("MarkerCount", 3, int), 1, 1000)
         for i in range(marker_count):
-            if i < len(self.default_marker_colors):
-                default_color = self.default_marker_colors[i]
-            else:
-                default_color = QtGui.QColor(QtCore.Qt.darkGray)
-            color = self.settings.value("Marker" + str(i+1) + "Color", default_color)
-            marker = Marker("Marker " + str(i+1), color)
+            marker = Marker("", self.settings)
             marker.updated.connect(self.markerUpdated)
             label, layout = marker.getRow()
             self.marker_control_layout.addRow(label, layout)
