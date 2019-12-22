@@ -107,9 +107,6 @@ class Marker(QtCore.QObject):
 
         if self.qsettings:
             Marker._instances += 1
-            self.index = Marker._instances
-        else:
-            self.index = 0
 
         if not self.name:
             self.name = f"Marker {Marker._instances:d}"
@@ -157,7 +154,7 @@ class Marker(QtCore.QObject):
         try:
             self.setColor(
                 self.qsettings.value(
-                    f"Marker{self.index:d}Color", COLORS[self.index]
+                    f"Marker{self.count():d}Color", COLORS[self.count()]
                 )
             )
         except AttributeError:  # happens when qsettings == None
