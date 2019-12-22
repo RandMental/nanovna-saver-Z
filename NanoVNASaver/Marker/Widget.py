@@ -74,7 +74,7 @@ COLORS = [
 logger = logging.getLogger(__name__)
 
 
-def default_field_names():
+def default_label_names() -> str:
     return [l.fieldname for l in LABELS if l.default_active]
 
 
@@ -93,7 +93,7 @@ class Marker(QtCore.QObject):
 
     updated = pyqtSignal(object)
 
-    fieldSelection = []
+    active_labels = []
 
     @classmethod
     def count(cls):
@@ -107,9 +107,14 @@ class Marker(QtCore.QObject):
 
         if self.qsettings:
             Marker._instances += 1
+            Marker.active_labels = self.qsettings.value(
+                "MarkerFields", defaultValue=default_label_names())
+            self.index = Marker._instances
+        else:
+            self.index = 0
 
         if not self.name:
-            self.name = f"Marker {Marker._instances:d}"
+            self.name = f"Marker {Marker._instances}"
 
         self.frequency = 0
 
@@ -154,7 +159,7 @@ class Marker(QtCore.QObject):
         try:
             self.setColor(
                 self.qsettings.value(
-                    f"Marker{self.count():d}Color", COLORS[self.count()]
+                    f"Marker{self.count()}Color", COLORS[self.count()]
                 )
             )
         except AttributeError:  # happens when qsettings == None
@@ -172,6 +177,7 @@ class Marker(QtCore.QObject):
         box_layout.addWidget(line)
         box_layout.addLayout(self.right_form)
 
+
         self.buildForm()
 
     def __del__(self):
@@ -180,6 +186,9 @@ class Marker(QtCore.QObject):
 
     def _size_str(self) -> str:
         return str(self.group_box.font().pointSize())
+
+    def update_settings(self):
+        self.qsettings.setValue(f"Marker{self.index}Color", self.color)
 
     def setScale(self, scale):
         self.group_box.setMaximumWidth(int(340 * scale))
@@ -209,23 +218,23 @@ class Marker(QtCore.QObject):
             old_row.fieldItem.widget().hide()
             old_row.labelItem.widget().hide()
 
-        if len(self.fieldSelection) <= 3:
-            for field in self.fieldSelection:
+        if len(self.active_labels) <= 3:
+            for field in self.active_labels:
                 if field in self.label:
                     self.left_form.addRow(
                         f"{self.label[field].name}:", self.label[field])
                     self.label[field].show()
         else:
-            left_half = math.ceil(len(self.fieldSelection)/2)
-            right_half = len(self.fieldSelection)
+            left_half = math.ceil(len(self.active_labels)/2)
+            right_half = len(self.active_labels)
             for i in range(left_half):
-                field = self.fieldSelection[i]
+                field = self.active_labels[i]
                 if field in self.label:
                     self.left_form.addRow(
                         f"{self.label[field].name}:", self.label[field])
                     self.label[field].show()
             for i in range(left_half, right_half):
-                field = self.fieldSelection[i]
+                field = self.active_labels[i]
                 if field in self.label:
                     self.right_form.addRow(
                         f"{self.label[field].name}:", self.label[field])
@@ -236,8 +245,8 @@ class Marker(QtCore.QObject):
         self.frequency = RFTools.RFTools.parseFrequency(frequency)
         self.updated.emit(self)
 
-    def setFieldSelection(self, fields):
-        self.fieldSelection = fields.copy()
+    def setFieldSelection(self, fields: List[str]):
+        self.active_labels = fields[:]
         self.buildForm()
 
     def setColor(self, color):

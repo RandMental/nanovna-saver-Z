@@ -37,7 +37,6 @@ from .Chart import Chart, PhaseChart, VSWRChart, PolarChart, SmithChart, LogMagC
 from .Calibration import CalibrationWindow, Calibration
 from .Inputs import FrequencyInputWidget
 from .Marker import Marker, MarkerSettingsWindow
-from .Marker.Widget import default_field_names
 from .SITools import clamp_value
 from .SweepWorker import SweepWorker
 from .Touchstone import Touchstone
@@ -984,9 +983,8 @@ class NanoVNASaver(QtWidgets.QWidget):
     def closeEvent(self, a0: QtGui.QCloseEvent) -> None:
         self.worker.stopped = True
         self.settings.setValue("MarkerCount", Marker.count())
-        # TODO: move functionality to Marker module
-        for i in range(Marker.count()):
-            self.settings.setValue("Marker" + str(i+1) + "Color", self.markers[i].color)
+        for marker in self.markers:
+            marker.update_settings()
 
         self.settings.setValue("WindowHeight", self.height())
         self.settings.setValue("WindowWidth", self.width())

@@ -19,7 +19,7 @@ import logging
 from PyQt5 import QtWidgets, QtCore, QtGui
 
 from NanoVNASaver.RFTools import Datapoint
-from NanoVNASaver.Marker.Widget import Marker, LABELS, default_field_names
+from NanoVNASaver.Marker.Widget import Marker, LABELS, default_label_names
 
 VID = 1155
 PID = 22336
@@ -60,7 +60,7 @@ class MarkerSettingsWindow(QtWidgets.QWidget):
         fields_group_box_layout = QtWidgets.QFormLayout(fields_group_box)
 
         self.savedFieldSelection = self.app.settings.value(
-            "MarkerFields", defaultValue=default_field_names()
+            "MarkerFields", defaultValue=default_label_names()
         )
 
         if self.savedFieldSelection == "":
@@ -68,7 +68,7 @@ class MarkerSettingsWindow(QtWidgets.QWidget):
 
         self.currentFieldSelection = self.savedFieldSelection.copy()
 
-        self.fieldSelectionView = QtWidgets.QListView()
+        self.active_labels_view = QtWidgets.QListView()
         self.model = QtGui.QStandardItemModel()
         for l in LABELS:
             item = QtGui.QStandardItem(l.description)
@@ -78,11 +78,11 @@ class MarkerSettingsWindow(QtWidgets.QWidget):
             if l.fieldname in self.currentFieldSelection:
                 item.setCheckState(QtCore.Qt.Checked)
             self.model.appendRow(item)
-        self.fieldSelectionView.setModel(self.model)
+        self.active_labels_view.setModel(self.model)
 
         self.model.itemChanged.connect(self.updateField)
 
-        fields_group_box_layout.addRow(self.fieldSelectionView)
+        fields_group_box_layout.addRow(self.active_labels_view)
 
         layout.addWidget(settings_group_box)
         layout.addWidget(fields_group_box)
@@ -150,18 +150,19 @@ class MarkerSettingsWindow(QtWidgets.QWidget):
         self.close()
 
     def defaultButtonClick(self):
-        self.currentFieldSelection = default_field_names()
+        self.currentFieldSelection = default_label_names()
         self.resetModel()
         self.updateMarker()
 
     def resetModel(self):
         self.model = QtGui.QStandardItemModel()
         for l in LABELS:
-            item = QtGui.QStandardItem(l.name)
+            item = QtGui.QStandardItem(l.description)
             item.setData(l.fieldname)
             item.setCheckable(True)
             item.setEditable(False)
             if l.fieldname in self.currentFieldSelection:
                 item.setCheckState(QtCore.Qt.Checked)
             self.model.appendRow(item)
-        self.fieldSelectionView.setModel(self.model)
+        self.active_labels_view.setModel(self.model)
+        self.model.itemChanged.connect(self.updateField)
