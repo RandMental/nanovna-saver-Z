@@ -66,21 +66,10 @@ class MarkerSettingsWindow(QtWidgets.QWidget):
         if self.savedFieldSelection == "":
             self.savedFieldSelection = []
 
-        self.currentFieldSelection = self.savedFieldSelection.copy()
+        self.currentFieldSelection = self.savedFieldSelection[:]
 
         self.active_labels_view = QtWidgets.QListView()
-        self.model = QtGui.QStandardItemModel()
-        for l in LABELS:
-            item = QtGui.QStandardItem(l.description)
-            item.setData(l.fieldname)
-            item.setCheckable(True)
-            item.setEditable(False)
-            if l.fieldname in self.currentFieldSelection:
-                item.setCheckState(QtCore.Qt.Checked)
-            self.model.appendRow(item)
-        self.active_labels_view.setModel(self.model)
-
-        self.model.itemChanged.connect(self.updateField)
+        self.update_displayed_data_form()
 
         fields_group_box_layout.addRow(self.active_labels_view)
 
@@ -132,7 +121,7 @@ class MarkerSettingsWindow(QtWidgets.QWidget):
         self.updateMarker()
 
     def applyButtonClick(self):
-        self.savedFieldSelection = self.currentFieldSelection.copy()
+        self.savedFieldSelection = self.currentFieldSelection[:]
         self.app.settings.setValue("MarkerFields", self.savedFieldSelection)
         self.app.settings.setValue("ColoredMarkerNames", self.checkboxColouredMarker.isChecked())
         for m in self.app.markers:
@@ -144,17 +133,17 @@ class MarkerSettingsWindow(QtWidgets.QWidget):
         self.close()
 
     def cancelButtonClick(self):
-        self.currentFieldSelection = self.savedFieldSelection.copy()
-        self.resetModel()
+        self.currentFieldSelection = self.savedFieldSelection[:]
+        self.update_display_data_form()
         self.updateMarker()
         self.close()
 
     def defaultButtonClick(self):
         self.currentFieldSelection = default_label_names()
-        self.resetModel()
+        self.update_displayed_data_form()
         self.updateMarker()
 
-    def resetModel(self):
+    def update_displayed_data_form(self):
         self.model = QtGui.QStandardItemModel()
         for l in LABELS:
             item = QtGui.QStandardItem(l.description)
