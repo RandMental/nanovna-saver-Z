@@ -86,8 +86,6 @@ class MarkerLabel(QtWidgets.QLabel):
 
 class Marker(QtCore.QObject):
     _instances = 0
-    name = "Marker"
-    color = QtGui.QColor()
     coloredText = True
     location = -1
 
@@ -97,10 +95,15 @@ class Marker(QtCore.QObject):
 
     fieldSelection = []
 
+    @classmethod
+    def count(cls):
+        return cls._instances
+
     def __init__(self, name: str = "", qsettings: QtCore.QSettings = None):
         super().__init__()
         self.qsettings = qsettings
         self.name = name
+        self.color = QtGui.QColor()
 
         if self.qsettings:
             Marker._instances += 1
@@ -121,10 +124,8 @@ class Marker(QtCore.QObject):
         # Data display label
         ###############################################################
         self.label = {}
-        self.fields = {}
         for l in LABELS:
-            self.label[l.fieldname] = QtWidgets.QLabel("")
-            self.fields[l.fieldname] = (l.name, self.label[l.fieldname])
+            self.label[l.fieldname] = MarkerLabel(l.name)
         self.label['actualfreq'].setMinimumWidth(100)
         self.label['returnloss'].setMinimumWidth(80)
 
@@ -177,7 +178,7 @@ class Marker(QtCore.QObject):
         self.buildForm()
 
     def __del__(self):
-        if not self.qsettings:
+        if self.qsettings:
             Marker._instances -= 1
 
     def _size_str(self) -> str:
@@ -213,25 +214,26 @@ class Marker(QtCore.QObject):
 
         if len(self.fieldSelection) <= 3:
             for field in self.fieldSelection:
-                if field in self.fields:
-                    label, value = self.fields[field]
-                    self.left_form.addRow(label + ":", value)
-                    value.show()
+                if field in self.label:
+                    self.left_form.addRow(
+                        f"{self.label[field].name}:", self.label[field])
+                    self.label[field].show()
         else:
             left_half = math.ceil(len(self.fieldSelection)/2)
             right_half = len(self.fieldSelection)
             for i in range(left_half):
                 field = self.fieldSelection[i]
-                if field in self.fields:
-                    label, value = self.fields[field]
-                    self.left_form.addRow(label + ":", value)
-                    value.show()
+                if field in self.label:
+                    self.left_form.addRow(
+                        f"{self.label[field].name}:", self.label[field])
+                    self.label[field].show()
             for i in range(left_half, right_half):
                 field = self.fieldSelection[i]
-                if field in self.fields:
-                    label, value = self.fields[field]
-                    self.right_form.addRow(label + ":", value)
-                    value.show()
+                if field in self.label:
+                    self.right_form.addRow(
+                        f"{self.label[field].name}:", self.label[field])
+                    self.label[field].show()
+
 
     def setFrequency(self, frequency):
         self.frequency = RFTools.RFTools.parseFrequency(frequency)
