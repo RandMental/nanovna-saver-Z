@@ -70,12 +70,38 @@ COLORS = [
     QtGui.QColor(255, 255, 0)
 ]
 
-
 logger = logging.getLogger(__name__)
 
 
 def default_label_names() -> str:
     return [l.fieldname for l in LABELS if l.default_active]
+
+
+class MarkerData():
+    def __init__(self, freq: int = 0,
+                 s11data: List[RFTools.Datapoint] = [],
+                 s21data: List[RFTools.Datapoint] = []):
+        self.freq = freq
+        self.s11data = s11data[:]
+        self.s21data = s21data[:]
+
+    def store(self, index: int,
+              s11data: List[RFTools.Datapoint],
+              s21data: List[RFTools.Datapoint]):
+        # handle boundaries
+        if index == 0:
+            index = 1
+            s11data = [s11data[0], ] + s11data
+            if s21data:
+                s21data = [s21data[0], ] + s21data
+        if index == len(s11data):
+            s11data = s11data + [s11data[-1], ]
+            if s21data:
+                s21data = s21data + [s21data[-1], ]
+        self.freq = s11data[1].freq
+        self.s11data = s11data[index-1:index+2]
+        if s21data:
+            self.s21data = s21data[index-1:index+2]
 
 
 class MarkerLabel(QtWidgets.QLabel):
@@ -104,19 +130,17 @@ class Marker(QtCore.QObject):
         self.qsettings = qsettings
         self.name = name
         self.color = QtGui.QColor()
+        self.index = 0
+        self.data = MarkerData()
 
         if self.qsettings:
             Marker._instances += 1
             Marker.active_labels = self.qsettings.value(
                 "MarkerFields", defaultValue=default_label_names())
             self.index = Marker._instances
-        else:
-            self.index = 0
 
         if not self.name:
             self.name = f"Marker {Marker._instances}"
-
-        self.frequency = 0
 
         self.frequencyInput = FrequencyInput()
         self.frequencyInput.setAlignment(QtCore.Qt.AlignRight)
@@ -159,9 +183,7 @@ class Marker(QtCore.QObject):
         try:
             self.setColor(
                 self.qsettings.value(
-                    f"Marker{self.count()}Color", COLORS[self.count()]
-                )
-            )
+                    f"Marker{self.count()}Color", COLORS[self.count()]))
         except AttributeError:  # happens when qsettings == None
             self.setColor(COLORS[1])
         except IndexError:
@@ -176,7 +198,6 @@ class Marker(QtCore.QObject):
         box_layout.addLayout(self.left_form)
         box_layout.addWidget(line)
         box_layout.addLayout(self.right_form)
-
 
         self.buildForm()
 
@@ -207,6 +228,12 @@ class Marker(QtCore.QObject):
                 f"QGroupBox {{ font-size: {self._size_str()}}};"
             )
 
+    def _add_active_labels(self, field, form):
+        if field in self.label:
+            form.addRow(
+                f"{self.label[field].name}:", self.label[field])
+            self.label[field].show()
+
     def buildForm(self):
         while self.left_form.count() > 0:
             old_row = self.left_form.takeRow(0)
@@ -220,29 +247,19 @@ class Marker(QtCore.QObject):
 
         if len(self.active_labels) <= 3:
             for field in self.active_labels:
-                if field in self.label:
-                    self.left_form.addRow(
-                        f"{self.label[field].name}:", self.label[field])
-                    self.label[field].show()
+                self._add_active_labels(field, self.left_form)
         else:
             left_half = math.ceil(len(self.active_labels)/2)
             right_half = len(self.active_labels)
             for i in range(left_half):
                 field = self.active_labels[i]
-                if field in self.label:
-                    self.left_form.addRow(
-                        f"{self.label[field].name}:", self.label[field])
-                    self.label[field].show()
+                self._add_active_labels(field, self.left_form)
             for i in range(left_half, right_half):
                 field = self.active_labels[i]
-                if field in self.label:
-                    self.right_form.addRow(
-                        f"{self.label[field].name}:", self.label[field])
-                    self.label[field].show()
-
+                self._add_active_labels(field, self.right_form)
 
     def setFrequency(self, frequency):
-        self.frequency = RFTools.RFTools.parseFrequency(frequency)
+        self.data.freq = RFTools.RFTools.parseFrequency(frequency)
         self.updated.emit(self)
 
     def setFieldSelection(self, fields: List[str]):
@@ -278,9 +295,6 @@ class Marker(QtCore.QObject):
         self.location = -1
         self.frequencyInput.nextFrequency = -1
         self.frequencyInput.previousFrequency = -1
-        if self.frequency == 0:
-            # No frequency set for this marker
-            return
         datasize = len(data)
         if datasize == 0:
             # Set the frequency before loading any data
@@ -292,14 +306,14 @@ class Marker(QtCore.QObject):
         upper_stepsize = data[-1].freq - data[-2].freq
 
         # We are outside the bounds of the data, so we can't put in a marker
-        if (self.frequency + lower_stepsize/2 < min_freq or
-                self.frequency - upper_stepsize/2 > max_freq):
+        if (self.data.freq + lower_stepsize/2 < min_freq or
+                self.data.freq - upper_stepsize/2 > max_freq):
             return
 
         min_distance = max_freq
         for i, item in enumerate(data):
-            if abs(item.freq - self.frequency) <= min_distance:
-                min_distance = abs(item.freq - self.frequency)
+            if abs(item.freq - self.data.freq) <= min_distance:
+                min_distance = abs(item.freq - self.data.freq)
             else:
                 # We have now started moving away from the nearest point
                 self.location = i-1
@@ -324,8 +338,9 @@ class Marker(QtCore.QObject):
                      s21data: List[RFTools.Datapoint]):
         if self.location == -1:
             return
-        s11 = s11data[self.location]
+        self.data.store(self.location, s11data, s21data)
 
+        s11 = s11data[self.location]
         imp = s11.impedance()
         cap_str = format_capacitance(
             RFTools.impedance_to_capacitance(imp, s11.freq))
