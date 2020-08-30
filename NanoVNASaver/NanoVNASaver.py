@@ -31,10 +31,8 @@ from .Windows import (
     DeviceSettingsWindow, DisplaySettingsWindow, SweepSettingsWindow,
     TDRWindow
 )
-from .Formatting import (
-    format_frequency, format_frequency_short, format_frequency_sweep,
-    parse_frequency,
-)
+from .Controls import MarkerControl, SweepControl
+from .Formatting import format_frequency
 from .Hardware.Hardware import Interface, get_interfaces, get_VNA
 from .Hardware.VNA import VNA
 from .RFTools import Datapoint, corr_att_data
@@ -49,8 +47,7 @@ from .Charts import (
     SmithChart, SParameterChart, TDRChart,
 )
 from .Calibration import Calibration
-from .Inputs import FrequencyInputWidget
-from .Marker import Marker
+from .Marker import Marker, DeltaMarker
 from .SweepWorker import SweepWorker
 from .Settings import BandsModel
 from .Touchstone import Touchstone
@@ -87,9 +84,17 @@ class NanoVNASaver(QtWidgets.QWidget):
         self.worker.signals.sweepError.connect(self.showSweepError)
         self.worker.signals.fatalSweepError.connect(self.showFatalSweepError)
 
-        self.bands = BandsModel()
+        self.markers = []
 
-        self.noSweeps = 1  # Number of sweeps to run
+        self.marker_column = QtWidgets.QVBoxLayout()
+        self.marker_frame = QtWidgets.QFrame()
+        self.marker_column.setContentsMargins(0, 0, 0, 0)
+        self.marker_frame.setLayout(self.marker_column)
+
+        self.sweep_control = SweepControl(self)
+        self.marker_control = MarkerControl(self)
+
+        self.bands = BandsModel()
 
         self.interface = Interface("serial", "None")
         self.vna = VNA(self.interface)
@@ -106,13 +111,13 @@ class NanoVNASaver(QtWidgets.QWidget):
 
         self.calibration = Calibration()
 
-        self.markers = []
 
         logger.debug("Building user interface")
 
         self.baseTitle = f"NanoVNA Saver {NanoVNASaver.version}"
         self.updateTitle()
-        layout = QtWidgets.QGridLayout()
+        layout = QtWidgets.QBoxLayout(QtWidgets.QBoxLayout.LeftToRight)
+
         scrollarea = QtWidgets.QScrollArea()
         outer = QtWidgets.QVBoxLayout()
         outer.addWidget(scrollarea)
@@ -128,8 +133,6 @@ class NanoVNASaver(QtWidgets.QWidget):
         widget = QtWidgets.QWidget()
         widget.setLayout(layout)
         scrollarea.setWidget(widget)
-
-        # outer.setContentsMargins(2, 2, 2, 2)  # Small screen mode, reduce margins?
 
         self.charts = {
             "s11": OrderedDict((
@@ -188,18 +191,22 @@ class NanoVNASaver(QtWidgets.QWidget):
 
         self.charts_layout = QtWidgets.QGridLayout()
 
+        ###############################################################
+        #  Create main layout
+        ###############################################################
+
         left_column = QtWidgets.QVBoxLayout()
-        self.marker_column = QtWidgets.QVBoxLayout()
-        self.marker_frame = QtWidgets.QFrame()
-        self.marker_column.setContentsMargins(0, 0, 0, 0)
-        self.marker_frame.setLayout(self.marker_column)
         right_column = QtWidgets.QVBoxLayout()
         right_column.addLayout(self.charts_layout)
         self.marker_frame.setHidden(not self.settings.value("MarkersVisible", True, bool))
+        chart_widget = QtWidgets.QWidget()
+        chart_widget.setLayout(right_column)
+        splitter = QtWidgets.QSplitter()
+        splitter.addWidget(self.marker_frame)
+        splitter.addWidget(chart_widget)
 
-        layout.addLayout(left_column, 0, 0)
-        layout.addWidget(self.marker_frame, 0, 1)
-        layout.addLayout(right_column, 0, 2)
+        layout.addLayout(left_column)
+        layout.addWidget(splitter, 2)
 
         ###############################################################
         #  Windows
@@ -220,135 +227,39 @@ class NanoVNASaver(QtWidgets.QWidget):
         #  Sweep control
         ###############################################################
 
-        sweep_control_box = QtWidgets.QGroupBox()
-        sweep_control_box.setMaximumWidth(250)
-        sweep_control_box.setTitle("Sweep control")
-        sweep_control_layout = QtWidgets.QFormLayout(sweep_control_box)
+        left_column.addWidget(self.sweep_control)
 
-        line = QtWidgets.QFrame()
-        line.setFrameShape(QtWidgets.QFrame.VLine)
-
-        sweep_input_layout = QtWidgets.QHBoxLayout()
-        sweep_input_left_layout = QtWidgets.QFormLayout()
-        sweep_input_right_layout = QtWidgets.QFormLayout()
-        sweep_input_layout.addLayout(sweep_input_left_layout)
-        sweep_input_layout.addWidget(line)
-        sweep_input_layout.addLayout(sweep_input_right_layout)
-        sweep_control_layout.addRow(sweep_input_layout)
-
-        self.sweepStartInput = FrequencyInputWidget()
-        self.sweepStartInput.setMinimumWidth(60)
-        self.sweepStartInput.setAlignment(QtCore.Qt.AlignRight)
-        self.sweepStartInput.textEdited.connect(self.updateCenterSpan)
-        self.sweepStartInput.textChanged.connect(self.updateStepSize)
-        sweep_input_left_layout.addRow(QtWidgets.QLabel("Start"), self.sweepStartInput)
-
-        self.sweepEndInput = FrequencyInputWidget()
-        self.sweepEndInput.setAlignment(QtCore.Qt.AlignRight)
-        self.sweepEndInput.textEdited.connect(self.updateCenterSpan)
-        self.sweepEndInput.textChanged.connect(self.updateStepSize)
-        sweep_input_left_layout.addRow(QtWidgets.QLabel("Stop"), self.sweepEndInput)
-
-        self.sweepCenterInput = FrequencyInputWidget()
-        self.sweepCenterInput.setMinimumWidth(60)
-        self.sweepCenterInput.setAlignment(QtCore.Qt.AlignRight)
-        self.sweepCenterInput.textEdited.connect(self.updateStartEnd)
-
-        sweep_input_right_layout.addRow(QtWidgets.QLabel("Center"), self.sweepCenterInput)
-
-        self.sweepSpanInput = FrequencyInputWidget()
-        self.sweepSpanInput.setAlignment(QtCore.Qt.AlignRight)
-        self.sweepSpanInput.textEdited.connect(self.updateStartEnd)
-
-        sweep_input_right_layout.addRow(QtWidgets.QLabel("Span"), self.sweepSpanInput)
-
-        self.sweepCountInput = QtWidgets.QLineEdit(self.settings.value("Segments", "1"))
-        self.sweepCountInput.setAlignment(QtCore.Qt.AlignRight)
-        self.sweepCountInput.setFixedWidth(60)
-        self.sweepCountInput.textEdited.connect(self.updateStepSize)
-
-        self.sweepStepLabel = QtWidgets.QLabel("Hz/step")
-        self.sweepStepLabel.setAlignment(QtCore.Qt.AlignRight | QtCore.Qt.AlignVCenter)
-
-        segment_layout = QtWidgets.QHBoxLayout()
-        segment_layout.addWidget(self.sweepCountInput)
-        segment_layout.addWidget(self.sweepStepLabel)
-        sweep_control_layout.addRow(QtWidgets.QLabel("Segments"), segment_layout)
-
-        btn_sweep_settings_window = QtWidgets.QPushButton("Sweep settings ...")
-        btn_sweep_settings_window.clicked.connect(
-            lambda: self.display_window("sweep_settings"))
-
-        sweep_control_layout.addRow(btn_sweep_settings_window)
-
-        self.sweepProgressBar = QtWidgets.QProgressBar()
-        self.sweepProgressBar.setMaximum(100)
-        self.sweepProgressBar.setValue(0)
-        sweep_control_layout.addRow(self.sweepProgressBar)
-
-        self.btnSweep = QtWidgets.QPushButton("Sweep")
-        self.btnSweep.clicked.connect(self.sweep)
-        self.btnSweep.setShortcut(QtCore.Qt.Key_W | QtCore.Qt.CTRL)
-        self.btnStopSweep = QtWidgets.QPushButton("Stop")
-        self.btnStopSweep.clicked.connect(self.stopSweep)
-        self.btnStopSweep.setShortcut(QtCore.Qt.Key_Escape)
-        self.btnStopSweep.setDisabled(True)
-        btn_layout = QtWidgets.QHBoxLayout()
-        btn_layout.addWidget(self.btnSweep)
-        btn_layout.addWidget(self.btnStopSweep)
-        btn_layout.setContentsMargins(0, 0, 0, 0)
-        btn_layout_widget = QtWidgets.QWidget()
-        btn_layout_widget.setLayout(btn_layout)
-        sweep_control_layout.addRow(btn_layout_widget)
-
-        left_column.addWidget(sweep_control_box)
-
-        ###############################################################
+        # ###############################################################
         #  Marker control
         ###############################################################
 
-        marker_control_box = QtWidgets.QGroupBox()
-        marker_control_box.setTitle("Markers")
-        marker_control_box.setMaximumWidth(250)
-        self.marker_control_layout = QtWidgets.QFormLayout(marker_control_box)
-
-        marker_count = max(self.settings.value("MarkerCount", 3, int), 1)
-        for i in range(marker_count):
-            marker = Marker("", self.settings)
-            marker.updated.connect(self.markerUpdated)
-            label, layout = marker.getRow()
-            self.marker_control_layout.addRow(label, layout)
-            self.markers.append(marker)
-            if i == 0:
-                marker.isMouseControlledRadioButton.setChecked(True)
-
-        self.showMarkerButton = QtWidgets.QPushButton()
-        if self.marker_frame.isHidden():
-            self.showMarkerButton.setText("Show data")
-        else:
-            self.showMarkerButton.setText("Hide data")
-        self.showMarkerButton.clicked.connect(self.toggleMarkerFrame)
-        lock_radiobutton = QtWidgets.QRadioButton("Locked")
-        lock_radiobutton.setLayoutDirection(QtCore.Qt.RightToLeft)
-        lock_radiobutton.setSizePolicy(
-            QtWidgets.QSizePolicy.Maximum, QtWidgets.QSizePolicy.Preferred)
-        hbox = QtWidgets.QHBoxLayout()
-        hbox.addWidget(self.showMarkerButton)
-        hbox.addWidget(lock_radiobutton)
-        self.marker_control_layout.addRow(hbox)
+        left_column.addWidget(self.marker_control)
 
         for c in self.subscribing_charts:
             c.setMarkers(self.markers)
             c.setBands(self.bands)
-        left_column.addWidget(marker_control_box)
 
         self.marker_data_layout = QtWidgets.QVBoxLayout()
         self.marker_data_layout.setContentsMargins(0, 0, 0, 0)
 
         for m in self.markers:
-            self.marker_data_layout.addWidget(m.getGroupBox())
+            self.marker_data_layout.addWidget(m.get_data_layout())
 
-        self.marker_column.addLayout(self.marker_data_layout)
+        scroll2 = QtWidgets.QScrollArea()
+        scroll2.setVerticalScrollBarPolicy(QtCore.Qt.ScrollBarAlwaysOn)
+        scroll2.setWidgetResizable(True)
+        scroll2.setVisible(True)
+
+        widget2 = QtWidgets.QWidget()
+        widget2.setLayout(self.marker_data_layout)
+        scroll2.setWidget(widget2)
+        self.marker_column.addWidget(scroll2)
+
+        # init delta marker (but assume only one marker exists)
+        self.delta_marker = DeltaMarker("Delta Marker 2 - Marker 1")
+        self.delta_marker_layout = self.delta_marker.get_data_layout()
+        self.delta_marker_layout.hide()
+        self.marker_column.addWidget(self.delta_marker_layout)
 
         ###############################################################
         #  Statistics/analysis
@@ -379,7 +290,7 @@ class NanoVNASaver(QtWidgets.QWidget):
 
         self.marker_column.addWidget(s21_control_box)
 
-        self.marker_column.addStretch(1)
+        # self.marker_column.addStretch(1)
 
         self.windows["analysis"] = AnalysisWindow(self)
         btn_show_analysis = QtWidgets.QPushButton("Analysis ...")
@@ -635,19 +546,20 @@ class NanoVNASaver(QtWidgets.QWidget):
             return
         logger.info("Read starting frequency %s and end frequency %s",
                     frequencies[0], frequencies[-1])
-        self.sweepStartInput.setText(
-            format_frequency_sweep(frequencies[0]))
+        self.sweep_control.set_start(frequencies[0])
         if frequencies[0] < frequencies[-1]:
-            self.sweepEndInput.setText(
-                format_frequency_sweep(frequencies[-1]))
+            self.sweep_control.set_end(frequencies[-1])
         else:
-            self.sweepEndInput.setText(
-                format_frequency_sweep(frequencies[-1] + 100000))
-        self.sweepStartInput.textEdited.emit(self.sweepStartInput.text())
-        self.sweepStartInput.textChanged.emit(self.sweepStartInput.text())
+            self.sweep_control.set_end(
+                frequencies[0] +
+                self.vna.datapoints * self.sweep_control.get_segments())
+
+        self.sweep_control.set_segments(1)  # speed up things
+        self.sweep_control.update_center_span()
+        self.sweep_control.update_step_size()
 
         logger.debug("Starting initial sweep")
-        self.sweep()
+        self.sweep_start()
 
     def disconnect_device(self):
         with self.interface.lock:
@@ -655,23 +567,17 @@ class NanoVNASaver(QtWidgets.QWidget):
             self.interface.close()
             self.btnSerialToggle.setText("Connect to device")
 
-    def toggleSweepSettings(self, disabled):
-        self.sweepStartInput.setDisabled(disabled)
-        self.sweepEndInput.setDisabled(disabled)
-        self.sweepSpanInput.setDisabled(disabled)
-        self.sweepCenterInput.setDisabled(disabled)
-        self.sweepCountInput.setDisabled(disabled)
-
-    def sweep(self):
+    def sweep_start(self):
         # Run the device data update
         if not self.vna.connected():
             return
         self.worker.stopped = False
 
-        self.sweepProgressBar.setValue(0)
-        self.btnSweep.setDisabled(True)
-        self.btnStopSweep.setDisabled(False)
-        self.toggleSweepSettings(True)
+        self.sweep_control.progress_bar.setValue(0)
+        self.sweep_control.btn_start.setDisabled(True)
+        self.sweep_control.btn_stop.setDisabled(False)
+        self.sweep_control.toggle_settings(True)
+
         for m in self.markers:
             m.resetLabels()
         self.s11_min_rl_label.setText("")
@@ -680,13 +586,12 @@ class NanoVNASaver(QtWidgets.QWidget):
         self.s21_max_gain_label.setText("")
         self.tdr_result_label.setText("")
 
-        if self.sweepCountInput.text().isdigit():
-            self.settings.setValue("Segments", self.sweepCountInput.text())
+        self.settings.setValue("Segments", self.sweep_control.get_segments())
 
         logger.debug("Starting worker thread")
         self.threadpool.start(self.worker)
 
-    def stopSweep(self):
+    def sweep_stop(self):
         self.worker.stopped = True
 
     def saveData(self, data, data21, source=None):
@@ -706,12 +611,17 @@ class NanoVNASaver(QtWidgets.QWidget):
     def markerUpdated(self, marker: Marker):
         with self.dataLock:
             marker.findLocation(self.data11)
-            for m in self.markers:
-                m.resetLabels()
-                m.updateLabels(self.data11, self.data21)
-
+            marker.resetLabels()
+            marker.updateLabels(self.data11, self.data21)
             for c in self.subscribing_charts:
                 c.update()
+        if Marker.count() >= 2 and not self.delta_marker_layout.isHidden():
+            self.delta_marker.set_markers(self.markers[0], self.markers[1])
+            self.delta_marker.resetLabels()
+            try:
+                self.delta_marker.updateLabels()
+            except IndexError:
+                pass
 
     def dataUpdated(self):
         with self.dataLock:
@@ -728,7 +638,7 @@ class NanoVNASaver(QtWidgets.QWidget):
             for c in self.combinedCharts:
                 c.setCombinedData(self.data11, self.data21)
 
-            self.sweepProgressBar.setValue(self.worker.percentage)
+            self.sweep_control.progress_bar.setValue(self.worker.percentage)
             self.windows["tdr"].updateTDR()
 
             # Find the minimum S11 VSWR:
@@ -778,49 +688,20 @@ class NanoVNASaver(QtWidgets.QWidget):
         self.dataAvailable.emit()
 
     def sweepFinished(self):
-        self.sweepProgressBar.setValue(100)
-        self.btnSweep.setDisabled(False)
-        self.btnStopSweep.setDisabled(True)
-        self.toggleSweepSettings(False)
+        self.sweep_control.progress_bar.setValue(100)
+        self.sweep_control.btn_start.setDisabled(False)
+        self.sweep_control.btn_stop.setDisabled(True)
+        self.sweep_control.toggle_settings(False)
 
-    def updateCenterSpan(self):
-        fstart = parse_frequency(self.sweepStartInput.text())
-        fstop = parse_frequency(self.sweepEndInput.text())
-        fspan = fstop - fstart
-        fcenter = int(round((fstart+fstop)/2))
-        if fspan < 0 or fstart < 0 or fstop < 0:
-            return
-        self.sweepSpanInput.setText(format_frequency_sweep(fspan))
-        self.sweepCenterInput.setText(format_frequency_sweep(fcenter))
-
-    def updateStartEnd(self):
-        fcenter = parse_frequency(self.sweepCenterInput.text())
-        fspan = parse_frequency(self.sweepSpanInput.text())
-        if fspan < 0 or fcenter < 0:
-            return
-        fstart = int(round(fcenter - fspan/2))
-        fstop = int(round(fcenter + fspan/2))
-        if fstart < 0 or fstop < 0:
-            return
-        self.sweepStartInput.setText(format_frequency_sweep(fstart))
-        self.sweepEndInput.setText(format_frequency_sweep(fstop))
-
-    def updateStepSize(self):
-        fspan = parse_frequency(self.sweepSpanInput.text())
-        if fspan < 0:
-            return
-        if self.sweepCountInput.text().isdigit():
-            segments = int(self.sweepCountInput.text())
-            if segments > 0:
-                fstep = fspan / (segments * self.vna.datapoints - 1)
-                self.sweepStepLabel.setText(
-                    f"{format_frequency_short(fstep)}/step")
+        for marker in self.markers:
+            marker.frequencyInput.textEdited.emit(
+                marker.frequencyInput.text())
 
     def setReference(self, s11data=None, s21data=None, source=None):
         if not s11data:
-            s11data = self.data11
-        if not s21data:
-            s21data = self.data21
+            s11data = self.data11[:]
+            s21data = self.data21[:]
+
         self.referenceS11data = s11data
         for c in self.s11charts:
             c.setReference(s11data)
@@ -853,16 +734,6 @@ class NanoVNASaver(QtWidgets.QWidget):
         if insert != "":
             title = title + " (" + insert + ")"
         self.setWindowTitle(title)
-
-    def toggleMarkerFrame(self):
-        if self.marker_frame.isHidden():
-            self.marker_frame.setHidden(False)
-            self.settings.setValue("MarkersVisible", True)
-            self.showMarkerButton.setText("Hide data")
-        else:
-            self.marker_frame.setHidden(True)
-            self.settings.setValue("MarkersVisible", False)
-            self.showMarkerButton.setText("Show data")
 
     def resetReference(self):
         self.referenceS11data = []
@@ -909,7 +780,11 @@ class NanoVNASaver(QtWidgets.QWidget):
 
     def showSweepError(self):
         self.showError(self.worker.error_message)
-        self.vna.flushSerialBuffers()  # Remove any left-over data
+        try:
+            self.vna.flushSerialBuffers()  # Remove any left-over data
+            self.vna.reconnect()  # try reconnection
+        except IOError:
+            pass
         self.sweepFinished()
 
     def popoutChart(self, chart: Chart):
@@ -959,7 +834,7 @@ class NanoVNASaver(QtWidgets.QWidget):
                      new_width, old_width, self.scaleFactor)
         # TODO: Update all the fixed widths to account for the scaling
         for m in self.markers:
-            m.getGroupBox().setFont(font)
+            m.get_data_layout().setFont(font)
             m.setScale(self.scaleFactor)
 
     def setSweepTitle(self, title):
