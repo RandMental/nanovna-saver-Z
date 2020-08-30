@@ -16,12 +16,23 @@
 #
 #  You should have received a copy of the GNU General Public License
 #  along with this program.  If not, see <https://www.gnu.org/licenses/>.
-import logging
+import unittest
 
-from NanoVNASaver.Hardware.NanoVNA import NanoVNA
+# Import targets to be tested
+from NanoVNASaver.Version import Version
 
-logger = logging.getLogger(__name__)
+class TestCases(unittest.TestCase):
 
-
-class NanoVNA_H(NanoVNA):
-    name = "NanoVNA-H"
+    def test_version(self):
+        ver = Version("v1.2.3-test")
+        self.assertEqual(str(ver), '1.2.3-test')
+        self.assertLessEqual(ver, Version("1.2.4"))
+        self.assertFalse(ver > Version("1.2.4"))
+        self.assertFalse(ver > Version("1.2.3-u"))
+        self.assertTrue(Version("1.2.4") >= ver)
+        self.assertFalse(Version("0.0.0") == Version("0.0.0-rc"))
+        self.assertEqual(ver.major, 1)
+        self.assertEqual(ver.minor, 2)
+        self.assertEqual(ver.revision, 3)
+        self.assertEqual(ver.note, '-test')
+        Version("asdasd")
